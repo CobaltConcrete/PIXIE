@@ -96,7 +96,7 @@ def main(args):
                 'pose_ref': batch['image_hd'],
                 'pose_ref_shape': pose_ref_shape
             }
-            grid_image_all = visualizer.visualize_grid(visdict, size=512)
+            grid_image_all = visualizer.visualize_grid({'pose_ref_shape': visdict['color_shape_images']}, size=512)
             cv2.imwrite(os.path.join(savefolder, name, f'{name}_animate_{i:05}.jpg'), grid_image_all)
             writer.append_data(grid_image_all[:,:,[2,1,0]])
     writer.close()

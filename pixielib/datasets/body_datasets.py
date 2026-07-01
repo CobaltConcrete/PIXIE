@@ -123,3 +123,78 @@ class TestData(Dataset):
                 'bbox': bbox,
                 'size': size,
                 }
+
+class WebcamPreprocessor:
+    """
+    Replicates TestData.__getitem__ for live frames without
+    the file I/O or per-frame detector instantiation overhead.
+    """
+    def __init__(self, device='cuda:0', crop_size=224, hd_size=1024, scale=1.1):
+        from pixielib.datasets.detectors import FasterRCNN
+        self.detector  = FasterRCNN(device=device)   # created ONCE
+        self.crop_size = crop_size
+        self.hd_size   = hd_size
+        self.scale     = scale
+
+    def process(self, bgr_frame: np.ndarray, device: str, iscrop: bool = True) -> dict:
+        image = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB) / 255.0
+        h, w  = image.shape[:2]
+
+        if iscrop:
+            image_tensor = torch.tensor(
+                image.transpose(2, 0, 1), dtype=torch.float32
+            )[None, ...]
+            bbox = self.detector.run(image_tensor)
+            if bbox is None:
+                left, top, right, bottom = 0, 0, w - 1, h - 1
+            else:
+                left, top, right, bottom = bbox
+            old_size = max(right - left, bottom - top)
+            center   = np.array([right - (right - left) / 2.0,
+                                  bottom - (bottom - top) / 2.0])
+            size     = int(old_size * self.scale)
+            src_pts  = np.array([
+                [center[0] - size / 2, center[1] - size / 2],
+                [center[0] - size / 2, center[1] + size / 2],
+                [center[0] + size / 2, center[1] - size / 2],
+            ])
+            bbox = [left, top, right, bottom]
+
+            # warp via similarity transform (crop path)
+            DST_224  = np.array([[0,0],[0,self.crop_size-1],[self.crop_size-1,0]])
+            tform    = estimate_transform('similarity', src_pts, DST_224)
+            dst_img  = warp(image, tform.inverse,
+                            output_shape=(self.crop_size, self.crop_size))
+
+            DST_1024 = np.array([[0,0],[0,self.hd_size-1],[self.hd_size-1,0]])
+            tform_hd = estimate_transform('similarity', src_pts, DST_1024)
+            hd_img   = warp(image, tform_hd.inverse,
+                            output_shape=(self.hd_size, self.hd_size))
+
+            tform_params = tform.params
+
+        else:
+            # full frame — pure resize, no similarity transform, no rotation
+            bbox         = [0, 0, w - 1, h - 1]
+            size         = max(w - 1, h - 1)
+            dst_img      = resize(image, (self.crop_size, self.crop_size), anti_aliasing=True)
+            hd_img       = resize(image, (self.hd_size,   self.hd_size),   anti_aliasing=True)
+            tform_params = np.eye(3)   # identity — only used by reproject_mesh
+
+        dst_img = dst_img.transpose(2, 0, 1)
+        hd_img  = hd_img.transpose(2, 0, 1)
+
+        batch = {
+            'image':          torch.tensor(dst_img).float(),
+            'image_hd':       torch.tensor(hd_img).float(),
+            'tform':          torch.tensor(tform_params).float(),
+            'original_image': torch.tensor(image.transpose(2,0,1)).float(),
+            'bbox':           bbox,
+            'size':           size,
+            'name':           'webcam',
+            'imagepath':      '',
+        }
+        util.move_dict_to_device(batch, device)
+        batch['image']    = batch['image'].unsqueeze(0)
+        batch['image_hd'] = batch['image_hd'].unsqueeze(0)
+        return batch

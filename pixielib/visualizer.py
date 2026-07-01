@@ -203,6 +203,7 @@ class Visualizer(object):
             face_colors = util.face_vertices(colors, self.render.faces.expand(batch_size, -1, -1))
             color_shape_images = self.render.render_shape(opdict['vertices'], opdict['transformed_vertices'], background=bg, colors = face_colors, h=h, w=w)
             visdict['color_shape_images'] = color_shape_images
+            return visdict
 
         # import ipdb; ipdb.set_trace()
         uvmap = opdict['texture'] if 'texture' in opdict.keys() else opdict['albedo']

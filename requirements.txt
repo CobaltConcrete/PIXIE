@@ -6,10 +6,12 @@ chumpy>=0.69
 scikit-image>=0.15
 opencv-python>=4.1.1
 scikit-image>=0.15     #skimage
-PyYAML==5.1.1
-torch==1.6.0   # for compatible with pytorch3d
-torchvision==0.7.0
+# PyYAML==5.1.1
+PyYAML
+# torch==1.6.0   # for compatible with pytorch3d
+# torchvision==0.7.0
 face-alignment
-kornia==0.4.0
+# kornia==0.4.0
+kornia
 yacs
 ninja
